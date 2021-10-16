@@ -9,12 +9,6 @@ class DeviceServiceType(Enum):
     HARDWARE_REVISION = "00002a27"
     FIRMWARE_REVISION = "00002a26"
     
-    def name(self):
-        return self.name
-    
-    def uuid(self):
-        return self.value
-    
     @classmethod
     def _missing_(cls, value):
         return DeviceServiceType.UNKNOWN
@@ -22,6 +16,15 @@ class DeviceServiceType(Enum):
 class DeviceService():
     def __init__(self):
         self.callbacks = []
+        self.service_paths = {}
+
+    @abc.abstractmethod
+    def add_service_path(self,path: str):
+        raise NotImplementedError('`add_service_path(self,path: str)` method must be defined')
+
+    @abc.abstractmethod
+    def remove_service_path(self,path: str):
+        raise NotImplementedError('`remove_service_path(self,path: str)` method must be defined')
     
     @abc.abstractmethod
     def add_callback(self,callback):

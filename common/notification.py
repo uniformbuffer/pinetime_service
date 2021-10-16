@@ -18,5 +18,5 @@ class Notification():
         self.source = source
         self.body = body
     def __str__(self):
-        return self.source+'\n'+self.body
+        return self.source+'\n\n'+self.body
 

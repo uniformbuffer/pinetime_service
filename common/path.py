@@ -87,3 +87,16 @@ class Path():
         self.type = PathType.DESCRIPTOR
     def __str__(self):
         return self.path
+
+
+class ServicePath():
+    def __init__(self,properties, listener, interface,members):
+        self.properties = properties
+        self.listener = listener
+        self.interface = interface
+        self.members = members
+    def __str__(self):
+        return"Properties: {}\nListener: {}\nInterface: {},\nMembers: {}".format(str(self.properties),str(self.listener),str(self.interface),str(self.members))
+    def deinit(self):
+        if self.listener != None:
+            self.listener.remove()

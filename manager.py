@@ -1,20 +1,22 @@
 import dbus
+import time
 from services.system_services.system_service import system_services,SystemServiceType,Call
-from common.filters import filter_by_interface
+from common.utils import filter_by_interface
 from common.notification import Notification,NotificationType
 from common.path import device_from_path,PathType
 from device import BTDevice
 
 class DeviceConnectionHandler():
-    def device_change_handler(self,interface,message,unused):
-        if 'Paired' in message:
+    def device_change_handler(self,*args):
+        interface = args[0]
+        message = args[1]
+        if interface == 'org.bluez.Device1' and 'Paired' in message:
             self.callback(message['Paired'],self.device)
     def __init__(self,system_bus,device,callback):
-        print("Listening for {} pairing".format(device))
         self.device = device
         self.callback = callback
         self.signal = dbus.Interface(system_bus.get_object('org.bluez', device), 'org.freedesktop.DBus.Properties').connect_to_signal("PropertiesChanged",self.device_change_handler)
-    def __exit__(self, exc_type, exc_value, traceback):
+    def deinit(self):
         self.signal.remove()
 
 class BTManager():
@@ -24,7 +26,7 @@ class BTManager():
         # Initializing system services
         self.services = {}
         for service_type in system_services:
-            print("Initialized system service {}".format(service_type))
+            print("Initialized system service {}".format(service_type.name))
             self.services[service_type] = system_services[service_type](self.session_bus)
         
         if SystemServiceType.CALL in self.services:
@@ -44,7 +46,7 @@ class BTManager():
 
         for dbus_device in self.list_paired_devices():
             device_services = self.filter_device_services(dbus_services,dbus_device)
-            print("Discovered device {}".format(dbus_device))
+            self.discovered_paths[dbus_device] = DeviceConnectionHandler(self.system_bus,dbus_device,self.device_connection_handler)
             device = BTDevice(self.system_bus,self.session_bus,dbus_device,device_services)
             self.devices[device.path] = device
 
@@ -78,31 +80,36 @@ class BTManager():
     # Callbacks
     def device_connection_handler(self,paired,device_path):
         if paired:
-            print(str(device_path) + " paired")
-            dbus_services = self.list_services()
-            device_services = self.filter_device_services(dbus_services,device_path)
-            self.devices[device_path] = BTDevice(self.system_bus,self.session_bus,device_path,device_services)
-            print(self.devices)
+            if device_path not in self.devices:
+                print("Device {} paired".format(str(device_path)))
+                time.sleep(0.5) #This is required to make bluez stabilize its internal resources
+                dbus_services = self.list_services()
+                device_services = self.filter_device_services(dbus_services,device_path)
+                self.devices[device_path] = BTDevice(self.system_bus,self.session_bus,device_path,device_services)
         else:
-            print(str(device_path) + " disconnected")
             if device_path in self.devices:
+                print("Device {} unpaired".format(str(device_path)))
+                self.devices[device_path].deinit()
                 del self.devices[device_path]
     def path_added_handler(self,*args):
         path = args[0]
+        interfaces = args[1]
         path_type = PathType.from_path(path)
-        if path_type == PathType.DEVICE:
-            print("Device discovered: "+str(path))
+        if 'org.bluez.Device1' in interfaces and path_type == PathType.DEVICE:
             self.discovered_paths[path] = DeviceConnectionHandler(self.system_bus,path,self.device_connection_handler)
-        if path_type == PathType.CHARACTERISTIC:
-            print("Service discovered: "+str(path))
+        if 'org.bluez.GattCharacteristic1' in interfaces and path_type == PathType.CHARACTERISTIC:
             device = device_from_path(path)
             if device in self.devices:
                 self.devices[device].add_service(path)
 
     def path_removed_handler(self,*args):
         path = args[0]
+        interfaces = args[1]
         path_type = PathType.from_path(path)
-        if path_type == PathType.CHARACTERISTIC:
+        if 'org.bluez.Device1' in interfaces and path_type == PathType.DEVICE:
+            if path in self.discovered_paths:
+                del self.discovered_paths[path]
+        if 'org.bluez.GattCharacteristic1' in interfaces and path_type == PathType.CHARACTERISTIC:
             device = device_from_path(path)
             if device in self.devices:
                 self.devices[device].remove_service(path)
@@ -114,4 +121,6 @@ class BTManager():
         self.notify_all(notification)
     def notification_callback(self,notification: Notification):
         self.notify_all(notification)
-    
+    def deinit(self):
+        self.device_added_signal.remove()
+        self.device_removed_signal.remove()

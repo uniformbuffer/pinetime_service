@@ -2,6 +2,7 @@ import dbus
 from enum import Enum
 from services.device_services.device_service import DeviceService,DeviceServiceType
 from common.notification import Notification,NotificationType
+from common.path import ServicePath
 
 class InfiniTimeNotificationType(Enum):
     SIMPLE_ALERT = 0x00,
@@ -39,11 +40,28 @@ class InfiniTimeNotificationType(Enum):
 
 
 
-class NotificationService():
-    def __init__(self,device_services,system_bus: dbus.SystemBus,device_path,service_path):
+class NotificationService(DeviceService):
+    def __init__(self,device_services,system_bus: dbus.SystemBus,device_path: str,service_paths: [str]):
         super().__init__()
-        self.interface = dbus.Interface(system_bus.get_object('org.bluez', service_path), 'org.bluez.GattCharacteristic1')
-        self.infinitime = dbus.Interface(system_bus.get_object('org.bluez', device_path), 'org.freedesktop.DBus.Properties').Get("org.bluez.Device1", "Alias").lower().startswith("infinitime")
+        self.system_bus = system_bus
+        self.device_path = device_path
+        for service_path in service_paths:
+            self.add_service_path(service_path)
+        print("Initialized device service {} on {}".format(NotificationService.service_type().name,device_path))
+
+    def service_type():
+        return DeviceServiceType.HARDWARE_REVISION
+
+    def add_service_path(self,service_path: str):
+        interface = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.bluez.GattCharacteristic1')
+        members = {
+            'infinitime': dbus.Interface(self.system_bus.get_object('org.bluez', self.device_path), 'org.freedesktop.DBus.Properties').Get("org.bluez.Device1", "Alias").lower().startswith("infinitime")
+        }
+        self.service_paths[service_path] = ServicePath(None,None,interface,members)
+
+    def remove_service_path(self,path: str):
+        if path in self.service_paths:
+            del self.service_paths[path]
     
     def service_type():
         return DeviceServiceType.NOTIFICATION
@@ -55,12 +73,18 @@ class NotificationService():
         pass
     
     def notify(self, notification: Notification):
-        if self.infinitime:
-            # InfiniTime convert the first 3 bytes (8 bits) into an unsigned int that specify what kind of message it has received
-            # Currently the available types are all the same except for CALL
-            prefix = InfiniTimeNotificationType.from_notification(notification.type).value[0].to_bytes(3,byteorder='little')
-            message = prefix + str(notification).encode('utf_8')
-            return self.interface.WriteValue(message,{})
-        else:
-            message = str(notification).encode('utf_8')
-            return self.interface.WriteValue(message,{})
+        for service_path in self.service_paths:
+            service = self.service_paths[service_path]
+
+            if service.members['infinitime']:
+                # InfiniTime convert the first 3 bytes (8 bits) into an unsigned int that specify what kind of message it has received
+                # Currently the available types are all the same except for CALL
+                prefix = InfiniTimeNotificationType.from_notification(notification.type).value[0].to_bytes(3,byteorder='little')
+                message = prefix + str(notification).encode('utf_8')
+                return service.interface.WriteValue(message,{})
+            else:
+                message = str(notification).encode('utf_8')
+                return service.interface.WriteValue(message,{})
+
+    def deinit(self):
+        pass

@@ -28,5 +28,5 @@ class MPRISService(SystemService):
     def remove_callback(self,callback):
         self.callbacks.remove(callback)
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def deinit(self):
         self.mpris_listener.remove()
