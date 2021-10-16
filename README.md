@@ -1,40 +1,44 @@
 # Pinetime service daemon
 
-Currently the daemon is capable to detect devices only on start, there is no "new device discovery" nor reconnection. 
-I'm currently working to improve this situation, it is just a matter to decide the best approach to the problem.
-Differently from other daemons for such purpose, the smartwatch must be paired to be detected.
+The daemon can detect currently paired devices at launch.
+It can also detect newely paired or unpaired devices.
+Sometimes (actually very rarely) could happened the bluetooth service miss to publish a device pairing message to dbus, 
+so the daemon will miss to add such to it's internal list and activate all the possible services for it.
+I will understand the reasoning of this to fix such undesired behaviour. If this happen, just unpair and pair again the device.
 
-So, overall, the steps are:
-- Pair the smartwatch using some system tool (for example from Gnome control center or Plasma settings)
-- Launch the daemon with `python3 main.py`
+The daemon can be launched simply with `python3 main.py`.
+Please consider that it is designed to detect only paired devices, so to make it working would require to use some bluetooth pairing tool.
+Most desktop environments offer a gui to make possible to pair bluetooth device. Any tool able to make bluetooth pairing should work.
 
-At launch it will detect all the paired devices and it will enable all the services both the host and the smartwatch support. What currently work is:
+After pairing, all the services offered by the device (and supported by the daemon) will be enabled.
+What currently work is:
 
 Generic features:
-- [x] Gathering all the paired devices and look for services for each of them
-- [ ] Reconnect device in case of disconnection
-- [ ] Proper packaging
-- [ ] Documentation
+- :ballot_box_with_check: Gathering all the paired devices and look for services for each of them
+- :ballot_box_with_check: Detect when a device is paired or unpaired
+- :x: Reconnect device in case of disconnection: it is very difficult to handle it properly from the daemon. It would be better handled by the DE bluetooth service
+- :black_square_button: Proper packaging
+- :black_square_button: Documentation
 
 Device services:
-- [x] Heart rate reading
-- [x] Heart rate notification
-- [x] Battery level reading
-- [x] Battery level notification
-- [x] Notification send (for both the "message" style and "call" style)
-- [x] Hardware revision reading
-- [x] Software revision reading
-- [x] Firmware revision reading
-- [x] Generic device info like alias, address and so on
-- [ ] Step counter reading (currently impossible, such service is not exposed by InfiniTime)
-- [ ] Step counter notification (currently impossible, such service is not exposed by InfiniTime)
+- :ballot_box_with_check: Heart rate reading
+- :ballot_box_with_check: Heart rate notification
+- :ballot_box_with_check: Battery level reading
+- :ballot_box_with_check: Battery level notification
+- :ballot_box_with_check: Notification send (for both the "message" style and "call" style)
+- :ballot_box_with_check: Hardware revision reading
+- :ballot_box_with_check: Software revision reading
+- :ballot_box_with_check: Firmware revision reading
+- :ballot_box_with_check: Generic device info like alias, address and so on
+- :x: Step counter reading:  currently impossible, such service is not exposed by InfiniTime
+- :x: Step counter notification:  currently impossible, such service is not exposed by InfiniTime
 
 System (host) services:
-- [x] Read desktop notifications
-- [x] Detect calls from Gnome Calls
-- [x] Detect opening and closing of MPRIS enabled applications
+- :ballot_box_with_check: Read desktop notifications
+- :ballot_box_with_check: Detect calls from Gnome Calls
+- :ballot_box_with_check: Detect opening and closing of MPRIS enabled applications
 
 Combined features:
-- [x] Redirect desktop notifications to the smartwatch
-- [x] Redirect call notifications to the smartwatch
-- [ ] Make possible to control MPRIS applications from the smartwatch
+- :ballot_box_with_check: Redirect desktop notifications to the smartwatch
+- :ballot_box_with_check: Redirect call notifications to the smartwatch
+- :black_square_button: Make possible to control MPRIS applications from the smartwatch
