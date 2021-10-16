@@ -1,6 +1,7 @@
 import dbus
 from services.device_services.device_service import device_services,DeviceServiceType
 from common.notification import Notification
+from common.path import Path,PathType
 
 class BTDevice():
     def heart_rate_callback(self,value: int):
@@ -12,6 +13,7 @@ class BTDevice():
     def __init__(self, system_bus, session_bus, device_path, dbus_services):
         self.system_bus = system_bus
         self.session_bus = session_bus
+        self.path = device_path
         self.properties = dbus.Interface(self.system_bus.get_object('org.bluez', device_path), 'org.freedesktop.DBus.Properties')
         
         self.services = {}
@@ -36,12 +38,10 @@ class BTDevice():
         for service in self.services:
             print("Initialized {}".format(service))
     
-    #def add_service(self,service: BTService):
-    #    self.services[service.path()] = service
-    #def del_service(self,path):
-    #    del self.services[path]
-    def path(self):
-        return self.properties.object_path
+    def add_service(self,path):
+        print("Service "+path+" added")
+    def del_service(self,path):
+        print("Service "+path+" deleted")
     def alias(self):
         return str(self.properties.Get("org.bluez.Device1", "Alias"))
     def address(self):
