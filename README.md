@@ -20,25 +20,35 @@ Generic features:
 - :black_square_button: Proper packaging
 - :black_square_button: Documentation
 
-Device services:
+System (host) services:
+- :ballot_box_with_check: Read desktop notifications
+- :ballot_box_with_check: Detect calls from Gnome Calls
+- :ballot_box_with_check: Detect opening and closing of MPRIS enabled applications
+
+Generic device services:
 - :ballot_box_with_check: Heart rate reading
 - :ballot_box_with_check: Heart rate notification
 - :ballot_box_with_check: Battery level reading
 - :ballot_box_with_check: Battery level notification
-- :ballot_box_with_check: Notification send (for both the "message" style and "call" style)
+- :ballot_box_with_check: Notification send
 - :ballot_box_with_check: Hardware revision reading
 - :ballot_box_with_check: Software revision reading
 - :ballot_box_with_check: Firmware revision reading
 - :ballot_box_with_check: Generic device info like alias, address and so on
 - :x: Step counter reading:  currently impossible, such service is not exposed by InfiniTime
 - :x: Step counter notification:  currently impossible, such service is not exposed by InfiniTime
+- :black_square_button: Media control
+- :black_square_button: Navigation
 
-System (host) services:
-- :ballot_box_with_check: Read desktop notifications
-- :ballot_box_with_check: Detect calls from Gnome Calls
-- :ballot_box_with_check: Detect opening and closing of MPRIS enabled applications
+
+InfiniTime services:
+- :ballot_box_with_check: Notification send for both the "message style" and "call style"
+- :ballot_box_with_check: Notification receive from "call style" messages
 
 Combined features:
 - :ballot_box_with_check: Redirect desktop notifications to the smartwatch
 - :ballot_box_with_check: Redirect call notifications to the smartwatch
+- :ballot_box_with_check: Accept or hangup calls from the smartwatch
 - :black_square_button: Make possible to control MPRIS applications from the smartwatch
+- :black_square_button: Make possible to receive navigation instructions on the smartwatch
+

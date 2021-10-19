@@ -90,13 +90,13 @@ class Path():
 
 
 class ServicePath():
-    def __init__(self,properties, listener, interface,members):
+    def __init__(self,properties, listener, interface,infos):
         self.properties = properties
         self.listener = listener
         self.interface = interface
-        self.members = members
+        self.infos = infos
     def __str__(self):
-        return"Properties: {}\nListener: {}\nInterface: {},\nMembers: {}".format(str(self.properties),str(self.listener),str(self.interface),str(self.members))
+        return"Properties: {}\nListener: {}\nInterface: {},\nInfos: {}".format(str(self.properties),str(self.listener),str(self.interface),str(self.members))
     def deinit(self):
         if self.listener != None:
             self.listener.remove()

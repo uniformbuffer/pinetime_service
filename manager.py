@@ -3,6 +3,7 @@ import time
 from services.system_services.system_service import system_services,SystemServiceType,Call
 from common.utils import filter_by_interface
 from common.notification import Notification,NotificationType
+from common.call import CallAnswer
 from common.path import device_from_path,PathType
 from device import BTDevice
 
@@ -47,7 +48,10 @@ class BTManager():
         for dbus_device in self.list_paired_devices():
             device_services = self.filter_device_services(dbus_services,dbus_device)
             self.discovered_paths[dbus_device] = DeviceConnectionHandler(self.system_bus,dbus_device,self.device_connection_handler)
-            device = BTDevice(self.system_bus,self.session_bus,dbus_device,device_services)
+            infos = {
+                'call_event_callback': self.call_event_callback
+            }
+            device = BTDevice(self.system_bus,self.session_bus,dbus_device,device_services,infos)
             self.devices[device.path] = device
 
     def notify_all(self,notification: Notification):
@@ -115,10 +119,19 @@ class BTManager():
                 self.devices[device].remove_service(path)
 
     def call_callback(self,call: Call):
-        source = "Incoming call from {}".format(call.source)
+        source = ""
         body = call.number
         notification = Notification(NotificationType.CALL,source,body)
         self.notify_all(notification)
+    def call_event_callback(self,call_event: CallAnswer):
+        if SystemServiceType.CALL in self.services:
+            if call_event == CallAnswer.ANSWER:
+                self.services[SystemServiceType.CALL].accept()
+            elif call_event == CallAnswer.HANGUP:
+                self.services[SystemServiceType.CALL].hangup()
+            else:
+                pass
+
     def notification_callback(self,notification: Notification):
         self.notify_all(notification)
     def deinit(self):
