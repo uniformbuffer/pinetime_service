@@ -18,6 +18,17 @@ class GenericHardwareRevisionService(HardwareRevisionService):
         else:
             return False
 
+    def add_service_path(self,service_path: str, infos: {}):
+        interface = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.bluez.GattCharacteristic1')
+        self.service_paths[service_path] = ServicePath(None,None,interface,infos)
+
+    def remove_service_path(self,service_path: str):
+        if service_path in self.service_paths:
+            del self.service_paths[service_path]
+
+    def list_service_paths(self)->[str]:
+        list(self.service_paths.keys())
+
     def hardware_revisions(self):
         hardware_revisions = {}
         for service_path in self.service_paths:

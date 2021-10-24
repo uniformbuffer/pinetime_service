@@ -1,5 +1,5 @@
 import dbus
-from services.device_services import search_compatible_service,DeviceServiceType
+from services.device_services import search_compatible_services,DeviceService,DeviceServiceType
 from common.notification import Notification,NotificationType
 from common.path import Path,PathType
 from common.utils import get_uuid
@@ -11,23 +11,21 @@ class BTDevice():
     def battery_level_callback(self,value: int):
         print("Battery level: "+str(value))
     
-    def __init__(self, system_bus, session_bus, device_path, dbus_services,infos):
+    def __init__(self, system_bus, session_bus, device_path,infos, device_service_callback):
         self.system_bus = system_bus
         self.session_bus = session_bus
         self.path = device_path
         self.infos = infos
+        self.device_service_callback = device_service_callback
         self.properties = dbus.Interface(self.system_bus.get_object('org.bluez', device_path), 'org.freedesktop.DBus.Properties')
-        
         self.services = {}
-        for uuid in dbus_services:
-            self.add_service(dbus_services[uuid])
 
         if DeviceServiceType.HEART_RATE in self.services:
             self.services[DeviceServiceType.HEART_RATE].add_callback(self.heart_rate_callback)
         if DeviceServiceType.BATTERY_LEVEL in self.services:
             self.services[DeviceServiceType.BATTERY_LEVEL].add_callback(self.battery_level_callback)
 
-        self.notify(Notification(NotificationType.SIMPLE_ALERT,'Host daemon','Detected and connected'))
+        #self.notify(Notification(NotificationType.SIMPLE_ALERT,'Host daemon','Detected and connected'))
     
     def add_service(self,service_path):
         interface = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.freedesktop.DBus.Properties')
@@ -37,18 +35,29 @@ class BTDevice():
         if 'call_event_callback' in self.infos:
             infos['call_event_callback'] = self.infos['call_event_callback']
 
-        service = search_compatible_service(self.system_bus,self.session_bus,str(service_path),infos)
-        if service == None:
-            return None
-        else:
+        services = search_compatible_services(self.system_bus,self.session_bus,str(service_path),infos)
+        for service in services:
             service_type = service.service_type()
+            is_new = False
             if service_type not in self.services:
                 self.services[service_type] = service(self.system_bus)
+                is_new = True
             self.services[service_type].add_service_path(service_path,infos)
+            if is_new:
+                self.device_service_callback(True,self.services[service_type])
 
     def remove_service(self,service_path):
         for service_type in self.services:
-            self.services[service_type].remove_service_path(service_path)
+            service = self.services[service_type]
+            service.remove_service_path(service_path)
+            if len(service.list_service_paths()) == 0:
+                del self.services[service_type]
+                self.device_service_callback(False,service)
+    def service(self,service_type: DeviceServiceType)->DeviceService:
+        if service_type in self.services:
+            return self.services[service_type]
+        else:
+            None
 
     def alias(self):
         return str(self.properties.Get("org.bluez.Device1", "Alias"))

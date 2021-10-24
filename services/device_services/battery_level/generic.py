@@ -1,5 +1,6 @@
 import dbus
 from common.path import ServicePath,PathType
+from common.event_type import EventType
 from services.device_services.battery_level import BatteryLevelService
 from services.device_services import DeviceService
 
@@ -7,8 +8,9 @@ class GenericBatteryLevelService(BatteryLevelService):
     def battery_level_handler(self,interface,dictionary,unused):
         if 'Value' in dictionary:
             value = int.from_bytes(bytearray(dictionary['Value']), "big")
-            for callback in self.callbacks:
-                callback(value)
+            callbacks = self.get_callbacks(EventType.BATTERY_LEVEL)
+            for index in callbacks:
+                callbacks[index](value)
 
     def compatible(system_bus: dbus.SystemBus, session_bus: dbus.SessionBus, service_path: str, infos: {})->bool:
         if 'uuid' in infos:
@@ -31,20 +33,17 @@ class GenericBatteryLevelService(BatteryLevelService):
         return battery_levels
 
     def add_service_path(self,service_path: str, infos: {}):
-        super().add_service_path(service_path,infos)
-        new_service = self.service_paths[service_path]
-        new_service.properties = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.freedesktop.DBus.Properties')
-        new_service.listener = new_service.properties.connect_to_signal("PropertiesChanged",self.battery_level_handler)
-        new_service.infos['notifying'] = True
-        new_service.interface.StartNotify()
+        properties = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.freedesktop.DBus.Properties')
+        listener = properties.connect_to_signal("PropertiesChanged",self.battery_level_handler)
+        interface = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.bluez.GattCharacteristic1')
+        interface.StartNotify()
+        infos['notifying'] = True
+        self.service_paths[service_path] = ServicePath(properties,listener,interface,infos)
 
     def remove_service_path(self,path: str):
         path = str(path)
         if path in self.service_paths:
             del self.service_paths[path]
 
-    def add_callback(self,callback):
-        self.callbacks.append(callback)
-
-    def remove_callback(self,callback):
-        self.callbacks.remove(callback)
+    def list_service_paths(self)->[str]:
+        list(self.service_paths.keys())

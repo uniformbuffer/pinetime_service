@@ -1,7 +1,7 @@
 import dbus
 from common.path import ServicePath,PathType
-from services.device_services.notification import NotificationService
 from common.notification import Notification,NotificationType
+from services.device_services.notification import NotificationService
 
 class GenericNotificationService(NotificationService):
     def __init__(self,system_bus: dbus.SystemBus):
@@ -17,6 +17,17 @@ class GenericNotificationService(NotificationService):
             return True
         else:
             return False
+
+    def add_service_path(self,service_path: str, infos: {}):
+        interface = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.bluez.GattCharacteristic1')
+        self.service_paths[service_path] = ServicePath(None,None,interface,infos)
+
+    def remove_service_path(self,service_path: str):
+        if service_path in self.service_paths:
+            del self.service_paths[service_path]
+
+    def list_service_paths(self)->[str]:
+        list(self.service_paths.keys())
 
     def notify(self, notification: Notification):
         for service_path in self.service_paths:

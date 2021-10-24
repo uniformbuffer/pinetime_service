@@ -1,8 +1,7 @@
 import dbus
 from enum import Enum
 from common.notification import Notification,NotificationType
-from common.path import device_from_path,PathType
-from common.call import CallAnswer
+from common.path import device_from_path,PathType,ServicePath
 from services.device_services.notification import NotificationService
 
 
@@ -21,7 +20,7 @@ class NotificationServiceType(Enum):
             return NotificationServiceType.UNKNOWN
 
 class NotificationServicePaths():
-    def __init__(self, request, event):
+    def __init__(self, system_bus, request, event):
         self.request = request
         self.event = event
     def add_path(self,service_path: str,infos: {}):
@@ -68,7 +67,7 @@ class InfiniTimeNotificationType(Enum):
 class InfinitimeNotificationService(NotificationService):
     def __init__(self,system_bus: dbus.SystemBus):
         super().__init__(system_bus)
-        self.path_tuples = {}
+        self.service_paths = {}
         self.current_call_event_service = None
 
     def compatible(system_bus: dbus.SystemBus, session_bus: dbus.SessionBus, service_path: str, infos: {})->bool:
@@ -90,56 +89,33 @@ class InfinitimeNotificationService(NotificationService):
             uuid = infos['uuid']
         else:
             uuid = dbus.Interface(system_bus.get_object('org.bluez', service_path), 'org.freedesktop.DBus.Properties').Get("org.bluez.GattCharacteristic1","UUID")
+
         service_type = uuid.split('-')[0]
-        if uuid == "00020001-78fc-48fe-8e23-433b3a1942d0":
-            return True
-        elif service_type == "00002a46":
+        if service_type == "00002a46":
             return True
         else:
             return False
 
     def add_service_path(self,service_path: str, infos: {}):
-        super().add_service_path(service_path,infos)
-        new_service = self.service_paths[service_path]
-        new_service.properties = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.freedesktop.DBus.Properties')
+        interface = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.bluez.GattCharacteristic1')
+        self.service_paths[service_path] = ServicePath(None,None,interface,infos)
 
-        device = device_from_path(service_path)
-        if device not in self.path_tuples:
-            self.path_tuples[device] = NotificationServicePaths(None,None)
-        self.path_tuples[device].add_path(service_path,infos)
+    def remove_service_path(self,service_path: str):
+        if service_path in self.service_paths:
+            del self.service_paths[service_path]
 
-        if 'call_event_callback' in infos:
-            self.add_callback(infos['call_event_callback'])
+    def list_service_paths(self)->[str]:
+        list(self.service_paths.keys())
 
     def notify(self, notification: Notification):
-        for device_path in self.path_tuples:
-            notification_service_tuple = self.path_tuples[device_path]
+        for device_path in self.service_paths:
+            service_path = self.service_paths[device_path]
             # InfiniTime convert the first 3 bytes (8 bits) into an unsigned int that specify what kind of message it has received
             # Currently the available types are all the same except for CALL
-            prefix = InfiniTimeNotificationType.from_notification(notification.type).value[0].to_bytes(3,byteorder='little')
-            message = prefix + str(notification).encode('utf_8')
+            notification_value = 0
+            message = notification_value.to_bytes(3,byteorder='little') + str(notification).encode('utf_8')
+            service_path.interface.WriteValue(message,{})
 
-            signal = None
-            event_service = None
-            request_service = None
-            if notification_service_tuple.event != None:
-                event_service = self.service_paths[notification_service_tuple.event]
-            if notification_service_tuple.request != None:
-                request_service = self.service_paths[notification_service_tuple.request]
-
-            if event_service != None:
-                event_service.signal = event_service.properties.connect_to_signal("PropertiesChanged",self.call_handler)
-                self.current_call_event_service =  event_service
-                self.current_call_event_service.interface.StartNotify()
-            if request_service != None:
-                request_service.interface.WriteValue(message,{})
-
-    def call_handler(self,interface,message,unused):
-        if 'Value' in message and self.current_call_event_service != None:
-            call_event = CallAnswer(int.from_bytes(bytearray(message['Value']), "big"))
-            for callback in self.callbacks:
-                callback(call_event)
-            self.current_call_event_service.interface.StopNotify()
-            self.current_call_event_service.signal.remove()
-            self.current_call_event_service = None
+    def list_service_paths(self)->[str]:
+        list(self.service_paths.keys())
 

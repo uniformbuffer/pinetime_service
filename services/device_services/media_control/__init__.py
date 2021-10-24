@@ -2,8 +2,9 @@ import dbus
 import abc
 from services.device_services import DeviceService,DeviceServiceType
 from common.path import ServicePath
+from common.media_control import PlaybackStatus
 
-class FirmwareRevisionService(DeviceService):
+class MediaControlService(DeviceService):
     def __init__(self,system_bus: dbus.SystemBus):
         super().__init__(system_bus)
 
@@ -24,8 +25,20 @@ class FirmwareRevisionService(DeviceService):
         raise NotImplementedError('`service_type(self)` method must be defined')
 
     @abc.abstractmethod
-    def firmware_revisions(self):
+    def set_playback_status(self, status: PlaybackStatus):
+        raise NotImplementedError('`__init__(self,system_bus: dbus.SystemBus,device_path: str)` method must be defined')
+
+    @abc.abstractmethod
+    def set_artist(self, artist: str):
+        raise NotImplementedError('`__init__(self,system_bus: dbus.SystemBus,device_path: str)` method must be defined')
+
+    @abc.abstractmethod
+    def set_album(self, album: str):
+        raise NotImplementedError('`__init__(self,system_bus: dbus.SystemBus,device_path: str)` method must be defined')
+
+    @abc.abstractmethod
+    def set_track(self, track: str):
         raise NotImplementedError('`__init__(self,system_bus: dbus.SystemBus,device_path: str)` method must be defined')
 
     def service_type():
-        return DeviceServiceType.FIRMWARE_REVISION
+        return DeviceServiceType.MEDIA_CONTROL

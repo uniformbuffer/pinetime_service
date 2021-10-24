@@ -1,6 +1,7 @@
 import dbus
 from common.path import ServicePath,PathType
-from services.device_services.device_service import DeviceService,DeviceServiceType
+from common.event_type import EventType
+from services.device_services import DeviceService,DeviceServiceType
 from services.device_services.heart_rate import HeartRateService
 
 class GenericHeartRateService(HeartRateService):
@@ -25,16 +26,24 @@ class GenericHeartRateService(HeartRateService):
         return heart_rates
 
     def add_service_path(self,service_path: str, infos: {}):
-        super().add_service_path(service_path,infos)
-        new_service = self.service_paths[service_path]
-        new_service.properties = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.freedesktop.DBus.Properties')
-        new_service.listener = new_service.properties.connect_to_signal("PropertiesChanged",self.heart_rate_handler)
-        new_service.infos['notifying'] = True
-        new_service.interface.StartNotify()
+        interface = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.bluez.GattCharacteristic1')
+        properties = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.freedesktop.DBus.Properties')
+        listener = properties.connect_to_signal("PropertiesChanged",self.heart_rate_handler)
+        infos['notifying'] = True
+        interface.StartNotify()
+        self.service_paths[service_path] = ServicePath(properties,listener,interface,infos)
+
+    def remove_service_path(self,service_path: str):
+        if service_path in self.service_paths:
+            del self.service_paths[service_path]
+
+    def list_service_paths(self)->[str]:
+        list(self.service_paths.keys())
 
     def heart_rate_handler(self,interface,dictionary,unused):
         if 'Value' in dictionary:
             value = int.from_bytes(bytearray(dictionary['Value']), "big")
-            for callback in self.callbacks:
-                callback(value)
+            callbacks = self.get_callbacks(EventType.HEART_RATE)
+            for index in callbacks:
+                callbacks[index](value)
 

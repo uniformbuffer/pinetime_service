@@ -1,7 +1,11 @@
 import dbus
 import time
-from services.system_services.system_service import system_services,SystemServiceType,Call
-from common.utils import filter_by_interface
+from services.device_services import DeviceService
+from services.host_services import HostService
+from services.interaction_services import InteractionService
+from services.host_services import host_services,HostServiceType,Call
+from services.interaction_services import interaction_services
+from common.utils import filter_by_interface,list_services,list_paired_devices,filter_device_services
 from common.notification import Notification,NotificationType
 from common.call import CallAnswer
 from common.path import device_from_path,PathType
@@ -24,72 +28,81 @@ class BTManager():
     def __init__(self):
         self.system_bus = dbus.SystemBus()
         self.session_bus = dbus.SessionBus()
-        # Initializing system services
-        self.services = {}
-        for service_type in system_services:
-            print("Initialized system service {}".format(service_type.name))
-            self.services[service_type] = system_services[service_type](self.session_bus)
-        
-        if SystemServiceType.CALL in self.services:
-            self.services[SystemServiceType.CALL].add_callback(self.call_callback)
-        
-        if SystemServiceType.NOTIFICATION in self.services:
-            self.services[SystemServiceType.NOTIFICATION].add_callback(self.notification_callback)
-        
+
+        # Path discovery
         self.discovered_paths = {}
         self.device_added_signal = dbus.Interface(self.system_bus.get_object('org.bluez', '/'), "org.freedesktop.DBus.ObjectManager").connect_to_signal('InterfacesAdded',self.path_added_handler)
         self.device_removed_signal = dbus.Interface(self.system_bus.get_object('org.bluez', '/'), "org.freedesktop.DBus.ObjectManager").connect_to_signal('InterfacesRemoved',self.path_removed_handler)
 
-        # Enumerating paired devices
+        # Initializing services
+        self.interaction_services = []
+        self.host_services = {}
         self.devices = {}
-        
-        dbus_services = self.list_services()
+        # Initializing interaction services
+        for interaction_service in interaction_services:
+            service = interaction_service()
+            self.interaction_services.append(service)
+            self.on_interaction_service_changed(True,service)
 
-        for dbus_device in self.list_paired_devices():
-            device_services = self.filter_device_services(dbus_services,dbus_device)
-            self.discovered_paths[dbus_device] = DeviceConnectionHandler(self.system_bus,dbus_device,self.device_connection_handler)
-            infos = {
-                'call_event_callback': self.call_event_callback
-            }
-            device = BTDevice(self.system_bus,self.session_bus,dbus_device,device_services,infos)
+        # Initializing host services
+        for service_type in host_services:
+            service = host_services[service_type](self.session_bus)
+            self.host_services[service_type] = service
+            self.on_host_service_changed(True,service)
+        
+        #if HostServiceType.CALL in self.host_services:
+        #    self.host_services[HostServiceType.CALL].add_callback(self.call_callback)
+
+        #if HostServiceType.NOTIFICATION in self.host_services:
+        #    self.host_services[HostServiceType.NOTIFICATION].add_callback(self.notification_callback)
+
+        # Enumerating paired devices
+        dbus_services = list_services(self.system_bus)
+        for device_path in list_paired_devices(self.system_bus):
+            print("Device {} paired".format(str(device_path)))
+            device_services = filter_device_services(dbus_services,device_path)
+            self.discovered_paths[device_path] = DeviceConnectionHandler(self.system_bus,device_path,self.device_connection_handler)
+            infos = {}
+            device = BTDevice(self.system_bus,self.session_bus,device_path,infos,self.on_device_service_changed)
             self.devices[device.path] = device
+            for uuid in device_services:
+                device.add_service(device_services[uuid])
+
 
     def notify_all(self,notification: Notification):
         for device in self.devices:
             self.devices[device].notify(notification)
-    def list_services(self):
-        dbus_services = {}
-        bluez_objects = dbus.Interface(self.system_bus.get_object('org.bluez', '/'), "org.freedesktop.DBus.ObjectManager").GetManagedObjects()
-        for service_path in filter_by_interface(bluez_objects, "org.bluez.GattCharacteristic1"):
-            interface = dbus.Interface(self.system_bus.get_object('org.bluez', service_path), 'org.freedesktop.DBus.Properties')
-            uuid = interface.Get("org.bluez.GattCharacteristic1","UUID")
-            dbus_services[uuid] = service_path
-        return dbus_services
-    def list_paired_devices(self):
-        paired_devices = []
-        bluez_objects = dbus.Interface(self.system_bus.get_object('org.bluez', '/'), "org.freedesktop.DBus.ObjectManager").GetManagedObjects()
-        for dbus_device in filter_by_interface(bluez_objects, "org.bluez.Device1"):
-            # Check if device is paired
-            interface = dbus.Interface(self.system_bus.get_object('org.bluez', dbus_device), 'org.freedesktop.DBus.Properties')
-            if interface.Get("org.bluez.Device1", "Paired"):
-                paired_devices.append(dbus_device)
-        return paired_devices
-    def filter_device_services(self,dbus_services,dbus_device:str):
-        device_services = {}
-        for uuid in dbus_services:
-            path = dbus_services[uuid]
-            if path.startswith(dbus_device):
-                device_services[uuid] = path
-        return device_services
+
+    def on_device_service_changed(self,added: bool, device_service: DeviceService):
+        if added:
+            for interaction_service in self.interaction_services:
+                interaction_service.device_service_added(device_service)
+            print("Added device service {}({})".format(device_service.__class__.service_type().name,device_service))
+        else:
+            for interaction_service in self.interaction_services:
+                interaction_service.device_service_removed(device_service)
+            print("Removed device service {}({})".format(device_service.__class__.service_type().name,device_service))
+    def on_host_service_changed(self, added:bool, host_service: HostService):
+        if added:
+            for interaction_service in self.interaction_services:
+                interaction_service.host_service_added(host_service)
+            print("Added host service {}({})".format(host_service.__class__.service_type().name,host_service))
+        else:
+            for interaction_service in self.interaction_services:
+                interaction_service.host_service_removed(host_service)
+            print("Removed host service {}({})".format(host_service.__class__.service_type().name,host_service))
+
+    def on_interaction_service_changed(self, added:bool, interaction_service: InteractionService):
+        pass
+
     # Callbacks
     def device_connection_handler(self,paired,device_path):
         if paired:
             if device_path not in self.devices:
                 print("Device {} paired".format(str(device_path)))
                 time.sleep(0.5) #This is required to make bluez stabilize its internal resources
-                dbus_services = self.list_services()
-                device_services = self.filter_device_services(dbus_services,device_path)
-                self.devices[device_path] = BTDevice(self.system_bus,self.session_bus,device_path,device_services)
+                infos = {}
+                self.devices[device_path] = BTDevice(self.system_bus,self.session_bus,device_path,infos,self.on_device_service_changed)
         else:
             if device_path in self.devices:
                 print("Device {} unpaired".format(str(device_path)))
@@ -118,22 +131,6 @@ class BTManager():
             if device in self.devices:
                 self.devices[device].remove_service(path)
 
-    def call_callback(self,call: Call):
-        source = ""
-        body = call.number
-        notification = Notification(NotificationType.CALL,source,body)
-        self.notify_all(notification)
-    def call_event_callback(self,call_event: CallAnswer):
-        if SystemServiceType.CALL in self.services:
-            if call_event == CallAnswer.ANSWER:
-                self.services[SystemServiceType.CALL].accept()
-            elif call_event == CallAnswer.HANGUP:
-                self.services[SystemServiceType.CALL].hangup()
-            else:
-                pass
-
-    def notification_callback(self,notification: Notification):
-        self.notify_all(notification)
     def deinit(self):
         self.device_added_signal.remove()
         self.device_removed_signal.remove()
